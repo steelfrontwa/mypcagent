@@ -1,0 +1,144 @@
+<!doctype html>
+<html lang="ru"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>ПК-агент</title>
+<link rel="stylesheet" href="/static/style.css"></head><body>
+<aside>
+  <h1>🤖 ПК-агент</h1>
+  <div class="dim">Проекты (недавние папки):</div>
+  <select id="recent"></select>
+  <div class="dim">Рабочая папка (агент видит только её):</div>
+  <div id="ws">…</div>
+  <div class="row"><button id="pick">📁 Выбрать</button><button id="openws">Открыть</button><button id="newchat">Новый чат</button><button id="compact" title="Сжать длинную историю в конспект">🧹 Сжать</button></div>
+  <div class="dim">Файлы:</div>
+  <div id="tree"></div>
+  <label><input type="checkbox" id="auto"> Не спрашивать разрешения</label>
+  <label><input type="checkbox" id="plan"> Сначала показывать план</label>
+  <details><summary class="dim" style="cursor:pointer">⚙ Дополнительно</summary>
+    <div style="display:flex;flex-direction:column;gap:8px;margin-top:8px">
+    <button id="probe">🔧 Проверить, умеет ли модель создавать файлы</button>
+    <label><input type="checkbox" id="forcetext"> Всегда использовать текстовый режим инструментов</label>
+    <label><input type="checkbox" id="autopilot"> 🚀 Автопилот для всех заданий (без вопросов и подтверждений)</label>
+    <div class="dim">Окно контекста модели, токенов (пусто = авто). Если ИИ «тупит» в длинном чате — поставь меньше</div>
+    <div class="row"><input type="text" id="ctxlocal" placeholder="локальная (авто 14000)" style="width:48%"><input type="text" id="ctxcloud" placeholder="облако (авто 60000)" style="width:48%"></div>
+    <label><input type="checkbox" id="verify"> Проверять результат вторым проходом</label>
+    <label><input type="checkbox" id="dockon"> Команды в Docker-песочнице</label>
+    <input type="text" id="dockimg" placeholder="Образ Docker (python:3.12-slim)">
+    <label><input type="checkbox" id="docknet"> Без интернета в песочнице</label>
+    <div class="dim">Цена облака за 1М токенов, $ (вход / выход) — для подсчёта стоимости</div>
+    <div class="row"><input type="text" id="pin" placeholder="вход" style="width:48%"><input type="text" id="pout" placeholder="выход" style="width:48%"></div>
+    <button id="rules">📝 Правила агента (AGENTS.md)</button>
+    </div>
+  </details>
+  <div class="dim">Режим ИИ</div>
+  <select id="mode"><option value="auto">Авто: простое — локально, сложное — облако</option><option value="cloud">Только облако</option><option value="local">Только локально</option></select>
+  <div id="pm"></div>
+  <datalist id="models"></datalist>
+  <button id="gamebtn" style="background:#1f5f3a;border-color:#2d8a55">🎮 Создать игру (автопилот)</button>
+  <button id="videobtn" style="background:#5a2f6b;border-color:#7d45a0">🎬 Создать видео из файлов</button>
+  <button id="schbtn">⏰ Расписание</button>
+  <button id="tgbtn">📨 Telegram-бот</button>
+  <button id="histbtn">🕘 История и публикация</button>
+  <div class="row"><button id="preview">▶ Предпросмотр</button><button id="undolast">↩ Отменить последнее</button></div>
+  <button id="rekey">🔌 Подключение ИИ</button>
+</aside>
+<main>
+  <button id="menu">☰ Меню</button>
+  <div id="hello">
+    <h2>Что сделать?</h2>
+    <div class="dim">Напиши задание — я сам посмотрю файлы, создам, изменю и проверю. Файлы можно перетащить в окно.</div>
+    <div class="chips">
+      <button>Покажи, что лежит в папке, и кратко опиши</button>
+      <button>Создай сайт-визитку для аренды эвакуатора в папке site</button>
+      <button>Найди во всех файлах слово TODO</button>
+      <button>Сделай бэкап-копию всех файлов в папку backup</button>
+    </div>
+  </div>
+  <div id="chat"></div>
+  <footer>
+    <div id="perr"><span id="perrt"></span><button id="perrfix">Исправить</button><button id="perrhide">Скрыть</button></div>
+    <div id="status"><span id="stt"></span><span id="ctx" title="Сколько окна памяти модели занято"></span><span id="usage"></span></div>
+    <div class="inp">
+      <button id="attach" title="Прикрепить файл">📎</button>
+      <button id="mic" title="Голосовой ввод" style="display:none">🎤</button>
+      <textarea id="input" rows="1" placeholder="Напиши задание… (Enter — отправить, Shift+Enter — новая строка)"></textarea>
+      <button id="send">Отправить</button>
+    </div>
+    <input type="file" id="file" multiple style="display:none">
+  </footer>
+</main>
+<div id="setup"><div>
+  <h2 style="margin:0">Подключение ИИ</h2>
+  <div class="row tabs"><button id="tabcloud" class="on">☁️ Облако (DeepSeek)</button><button id="tablocal">💻 Локальный ИИ</button></div>
+  <div id="pcloud" style="display:flex;flex-direction:column;gap:10px">
+    <div class="dim">Вставь API-ключ DeepSeek (platform.deepseek.com → API keys). Остальное я настрою сам.</div>
+    <input type="password" id="key" placeholder="API-ключ (sk-...)">
+    <input type="text" id="keyurl" placeholder="Адрес API — только если ключ не от DeepSeek, например https://.../v1">
+    <input type="text" id="keymodel" placeholder="Модель (необязательно, найду сама)">
+    <div class="dim" style="font-size:12px">Ключ от сервиса-посредника (sprutdock и т.п.): возьми адрес API (Base URL) в его личном кабинете или документации и вставь выше.</div>
+    <div id="keyerr" style="color:var(--bad);font-size:13px"></div>
+    <button id="keyok" style="background:#2b5cc4">Подключить</button>
+  </div>
+  <div id="plocal" style="display:none;flex-direction:column;gap:10px">
+    <div class="dim">Запусти Ollama или LM Studio на этом компьютере, я найду сервер сам. Нужна модель с поддержкой инструментов (tools), например qwen2.5 или llama3.1.</div>
+    <select id="lsrv"></select>
+    <select id="lmodel"></select>
+    <input type="text" id="lurl" placeholder="Или свой адрес, например http://192.168.1.5:11434">
+    <div id="lerr" style="color:var(--bad);font-size:13px"></div>
+    <div class="row"><button id="lscan">🔍 Найти снова</button><button id="lok" style="background:#2b5cc4">Подключить</button></div>
+  </div>
+  <button id="sclose" style="display:none">Закрыть</button>
+</div></div>
+<div id="hist"><div>
+  <h2 style="margin:0">🕘 История и публикация</h2>
+  <div id="hmsg" class="dim"></div>
+  <div id="hbox"></div>
+  <div class="dim" style="margin-top:6px">🚀 Публикация (например, Amvera: https://git.amvera.ru/логин/проект)</div>
+  <input type="text" id="purl" placeholder="Адрес git-репозитория">
+  <input type="text" id="pbranch" placeholder="Ветка (пусто = master для Amvera, иначе текущая)">
+  <div id="pres" style="font-size:13px;white-space:pre-wrap"></div>
+  <div class="row"><button id="pgo" style="background:#2b5cc4">🚀 Опубликовать</button><button id="pclose">Закрыть</button></div>
+</div></div>
+<div id="tg"><div>
+  <h2 style="margin:0">📨 Telegram-бот</h2>
+  <div class="dim">Управляй агентом с телефона из любого места: 1) в Telegram открой @BotFather, команда /newbot, получи токен; 2) вставь токен ниже; 3) отправь своему боту /pair и код.</div>
+  <input type="password" id="tgtoken" placeholder="Токен бота (123456:ABC...)">
+  <div id="tgst" style="font-size:13.5px;white-space:pre-wrap"></div>
+  <div class="row"><button id="tgok" style="background:#2b5cc4">Подключить</button><button id="tgoff">Выключить</button><button id="tgclose">Закрыть</button></div>
+</div></div>
+<div id="sch"><div>
+  <h2 style="margin:0">⏰ Расписание заданий</h2>
+  <div class="dim">Агент выполнит задание сам в нужное время, пока запущена программа. Результат придёт в чат (и в Telegram, если он подключён). Задание работает в папке: <span id="schws"></span></div>
+  <div id="schlist"></div>
+  <textarea id="schtext" rows="2" placeholder="Что сделать, например: Проверь, открывается ли сайт в папке, и запиши результат в report.md"></textarea>
+  <div class="row"><select id="schkind" style="width:48%"><option value="daily">Каждый день</option><option value="weekdays">По будням</option><option value="every">Каждые N минут</option></select>
+  <input type="time" id="schtime" value="09:00" style="width:48%"><input type="text" id="schmin" placeholder="минут (от 5)" style="width:48%;display:none"></div>
+  <label><input type="checkbox" id="schauto"> Разрешать действия без вопросов (иначе при необходимости разрешения ждёт 10 минут и отменяет)</label>
+  <div id="scherr" style="color:var(--bad);font-size:13px"></div>
+  <div class="row"><button id="schadd" style="background:#2b5cc4">Добавить</button><button id="schclose">Закрыть</button></div>
+</div></div>
+<div id="game"><div>
+  <h2 style="margin:0">🎮 Создать игру на автопилоте</h2>
+  <div class="dim">Агент сам придумает механику, напишет все файлы, проверит в браузере, исправит ошибки и покажет результат. Без вопросов и без подтверждений. Лучше всего работает с облачной моделью.</div>
+  <textarea id="gameidea" rows="3" placeholder="Опиши идею (можно пусто — придумаю сама). Например: космический шутер, где враги появляются волнами, а между волнами можно улучшать корабль"></textarea>
+  <div class="chips"><button>Аркада</button><button>Платформер</button><button>Головоломка</button><button>Гонки</button><button>Шутер сверху</button><button>Три в ряд</button><button>Выживание</button></div>
+  <label><input type="checkbox" id="gamepub"> После создания опубликовать (нужен адрес в «История и публикация»)</label>
+  <div class="row"><button id="gamego" style="background:#2b5cc4">🚀 Запустить автопилот</button><button id="gameclose">Закрыть</button></div>
+</div></div>
+<div id="video"><div>
+  <h2 style="margin:0">🎬 Создать видео из файлов</h2>
+  <div class="dim">Положи фото, видеоклипы, музыку и текст (сценарий) в рабочую папку или перетащи файлы в это окно. Агент сам продумает ролик, соберёт, проверит и исправит.</div>
+  <div id="vmedia" style="font-size:13.5px"></div>
+  <div class="row"><button id="vadd">➕ Добавить файлы</button><button id="vinstall" style="display:none">⬇ Установить ffmpeg</button></div>
+  <input type="file" id="vfile" multiple style="display:none">
+  <textarea id="videa" rows="3" placeholder="О чём ролик и какой стиль (необязательно). Например: отчёт о поездке, динамичный, с подписями"></textarea>
+  <div class="row"><select id="vfmt" style="width:48%"><option value="auto">Формат: выбрать самой</option><option value="landscape">Горизонтальное 16:9</option><option value="vertical">Вертикальное 9:16 (Shorts)</option><option value="square">Квадрат 1:1</option></select><input type="text" id="vsec" placeholder="длина, сек (по желанию)" style="width:48%"></div>
+  <label><input type="checkbox" id="vcap" checked> Подписи на экране</label>
+  <label><input type="checkbox" id="vmus" checked> Музыка из папки (если есть)</label>
+  <label><input type="checkbox" id="vvoice"> Озвучить голосом</label>
+  <div id="vst" style="font-size:13px;color:var(--dim)"></div>
+  <div class="row"><button id="vgo" style="background:#2b5cc4">🚀 Создать видео</button><button id="vclose">Закрыть</button></div>
+</div></div>
+<div id="toast"></div>
+<script>const TOKEN="__TOKEN__";</script>
+<script src="/static/app.js"></script></body></html>
